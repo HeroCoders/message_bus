@@ -1,3 +1,57 @@
+09-06-2020
+
+- Version 3.3.1
+
+  - FIX: Disconnect Redis conn when rescuing errors in global subscribe.
+  - FIX: `MessageBus::Backends::Redis#global_subscribe` not closing Redis connections.
+
+15-05-2020
+
+- Version 3.3.0
+
+   - FEATURE: `MessageBus.base_route=` to alter the route that message bus will listen on.
+
+07-05-2020
+
+- Version 3.2.0
+
+   - FIX: compatability with Rails 6.0.3, note: apps without ActionDispatch::Flash may stop working after this upgrade
+   to correct this disable middleware injection with `config.skip_message_bus_middleware = true` and configure middleware by hand with `app.middleware.use(MessageBus::Rack::Middleware)`
+
+28-04-2020
+
+- Version 3.1.0
+
+  - FEATURE: `MessageBus#register_client_message_filter` to register a custom filter so that messages can be inspected and filtered away from clients.
+
+27-04-2020
+
+- Version 3.0.0
+
+  - Drop support for Ruby 2.3
+  - FIX: Don't publish message to intersection of `user_ids` and `group_ids` - instead use the union, this is a behavior change, hence a new major release.
+
+26-03-2020
+
+- Version 2.2.4
+
+  - FEATURE: shouldLongPollCallback optional setting which allows overriding decision about long polling
+
+18-10-2019
+
+- Version 2.2.3
+
+  - FIX: Protect redis config from being manipulated in backend
+
+09-08-2019
+
+- Version 2.2.2
+
+  - FEATURE: Support rate limiting by server, 429 status codes are respected and we hold off as needed
+
+  - FIX: In the redis backend make the `is_readonly?` method compatible with the redis gem both pre and post v4.0 when the `client` attribute was removed
+
+
 30-04-2019
 
 - Version 2.2.1

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative '../spec_helper'
 require 'message_bus'
 require 'redis'
@@ -33,6 +35,23 @@ describe MessageBus do
     @bus.on
 
     @bus.after_fork
+  end
+
+  describe "#base_route=" do
+    it "adds leading and trailing slashes" do
+      @bus.base_route = "my/base/route"
+      @bus.base_route.must_equal '/my/base/route/'
+    end
+
+    it "leaves existing leading and trailing slashes" do
+      @bus.base_route = "/my/base/route/"
+      @bus.base_route.must_equal '/my/base/route/'
+    end
+
+    it "removes duplicate slashes" do
+      @bus.base_route = "//my///base/route"
+      @bus.base_route.must_equal '/my/base/route/'
+    end
   end
 
   it "can subscribe from a point in time" do
@@ -315,5 +334,20 @@ describe MessageBus do
     wait_for(2000) { data.length == 3 }
 
     data.must_equal(["pre-fork", "from-fork", "continuation"])
+  end
+
+  describe '#register_client_message_filter' do
+    it 'should register the message filter correctly' do
+      @bus.register_client_message_filter('/test')
+
+      @bus.client_message_filters.must_equal([])
+
+      @bus.register_client_message_filter('/test') { puts "hello world" }
+
+      channel, blk = @bus.client_message_filters[0]
+
+      blk.must_respond_to(:call)
+      channel.must_equal('/test')
+    end
   end
 end

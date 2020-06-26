@@ -128,15 +128,43 @@ class MessageBus::Client
   # @return [Boolean] whether or not the client has permission to receive the
   #   passed message
   def allowed?(msg)
-    allowed = !msg.user_ids || msg.user_ids.include?(self.user_id)
-    allowed &&= !msg.client_ids || msg.client_ids.include?(self.client_id)
-    allowed && (
-      msg.group_ids.nil? ||
-      msg.group_ids.length == 0 ||
-      (
-        msg.group_ids - self.group_ids
+    client_allowed = !msg.client_ids || msg.client_ids.length == 0 || msg.client_ids.include?(self.client_id)
+
+    user_allowed = false
+    group_allowed = false
+
+    # this is an inconsistency we should fix anyway, publishing `user_ids: nil` should work same as groups
+    has_users = msg.user_ids && msg.user_ids.length > 0
+    has_groups = msg.group_ids && msg.group_ids.length > 0
+
+    if has_users
+      user_allowed = msg.user_ids.include?(self.user_id)
+    end
+
+    if has_groups
+      group_allowed = (
+        msg.group_ids - (self.group_ids || [])
       ).length < msg.group_ids.length
-    )
+    end
+
+    has_permission = client_allowed && (user_allowed || group_allowed || (!has_users && !has_groups))
+
+    return has_permission if !has_permission
+
+    filters_allowed = true
+
+    len = @bus.client_message_filters.length
+    while len > 0
+      len -= 1
+      channel_prefix, blk = @bus.client_message_filters[len]
+
+      if msg.channel.start_with?(channel_prefix)
+        filters_allowed = blk.call(msg)
+        break if !filters_allowed
+      end
+    end
+
+    filters_allowed
   end
 
   # @return [Array<MessageBus::Message>] the set of messages the client is due

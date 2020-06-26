@@ -251,11 +251,11 @@ LUA
 
       # (see Base#global_unsubscribe)
       def global_unsubscribe
-        if @redis_global
-          # new connection to avoid deadlock
-          new_redis_connection.publish(redis_channel_name, UNSUB_MESSAGE)
-          @redis_global.disconnect
-          @redis_global = nil
+        begin
+          new_redis = new_redis_connection
+          new_redis.publish(redis_channel_name, UNSUB_MESSAGE)
+        ensure
+          new_redis&.disconnect!
         end
       end
 
@@ -278,13 +278,13 @@ LUA
         end
 
         begin
-          @redis_global = new_redis_connection
+          global_redis = new_redis_connection
 
           if highest_id
             clear_backlog.call(&blk)
           end
 
-          @redis_global.subscribe(redis_channel_name) do |on|
+          global_redis.subscribe(redis_channel_name) do |on|
             on.subscribe do
               if highest_id
                 clear_backlog.call(&blk)
@@ -298,7 +298,7 @@ LUA
 
             on.message do |_c, m|
               if m == UNSUB_MESSAGE
-                @redis_global.unsubscribe
+                global_redis.unsubscribe
                 return
               end
               m = MessageBus::Message.decode m
@@ -320,14 +320,17 @@ LUA
         rescue => error
           @logger.warn "#{error} subscribe failed, reconnecting in 1 second. Call stack #{error.backtrace}"
           sleep 1
+          global_redis&.disconnect!
           retry
+        ensure
+          global_redis&.disconnect!
         end
       end
 
       private
 
       def new_redis_connection
-        ::Redis.new(@redis_config)
+        ::Redis.new(@redis_config.dup)
       end
 
       # redis connection used for publishing messages
@@ -433,10 +436,11 @@ LUA
         key = "__mb_is_readonly"
 
         begin
+          # disconnect to force a reconnect when attempting to set the key
           # in case we are not connected to the correct server
           # which can happen when sharing ips
-          pub_redis.client.reconnect
-          pub_redis.client.call([:set, key, '1'])
+          pub_redis.disconnect!
+          pub_redis.set(key, '1')
           false
         rescue ::Redis::CommandError => e
           return true if e.message =~ /^READONLY/

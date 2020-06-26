@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 $: << File.dirname(__FILE__)
 $: << File.join(File.dirname(__FILE__), '..', 'lib')
 require 'thin'
@@ -5,7 +7,7 @@ require 'lib/fake_async_middleware'
 require 'message_bus'
 
 require 'minitest/autorun'
-require 'minitest/spec'
+require 'minitest/global_expectations'
 
 require_relative "helpers"
 

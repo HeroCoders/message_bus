@@ -8,6 +8,8 @@ Since long-polling is implemented using Rack Hijack and Thin::Async, all common 
 
 MessageBus is implemented as Rack middleware and can be used by any Rails / Sinatra or pure Rack application.
 
+Read the generated docs: <https://www.rubydoc.info/gems/message_bus>
+
 ## Try it out!
 
 Live chat demo per [examples/chat](https://github.com/SamSaffron/message_bus/tree/master/examples/chat) is at:
@@ -72,38 +74,76 @@ id = MessageBus.last_id("/channel")
 MessageBus.backlog "/channel", id
 ```
 
+### Targetted messages
+
+Messages can be targetted to particular clients by supplying the `client_ids` option when publishing a message.
+
 ```ruby
-# messages can be targetted at particular users or groups
-MessageBus.publish "/channel", "hello", user_ids: [1,2,3], group_ids: [4,5,6]
+MessageBus.publish "/channel", "hello", client_ids: ["XXX", "YYY"] # (using MessageBus.clientId)
+```
 
-# messages can be targetted at particular clients (using MessageBus.clientId)
-MessageBus.publish "/channel", "hello", client_ids: ["XXX","YYY"]
+By configuring the `user_id_lookup` and `group_ids_lookup` options with a Proc or Lambda which will be called with a [Rack specification environment](https://github.com/rack/rack/blob/master/SPEC.rdoc#the-environment-), messages can be targetted to particular clients users or groups by supplying either the `user_ids` or `group_ids` options when publishing a message.
 
-# message bus determines the user ids and groups based on env
-
+```ruby
 MessageBus.configure(user_id_lookup: proc do |env|
   # this lookup occurs on JS-client poolings, so that server can retrieve backlog
   # for the client considering/matching/filtering user_ids set on published messages
   # if user_id is not set on publish time, any user_id returned here will receive the message
-
   # return the user id here
 end)
+
+# Target user_ids when publishing a message
+MessageBus.publish "/channel", "hello", user_ids: [1, 2, 3]
 
 MessageBus.configure(group_ids_lookup: proc do |env|
   # return the group ids the user belongs to
   # can be nil or []
 end)
 
-# example of message bus to set user_ids from an initializer in Rails and Devise:
+# Target group_ids when publishing a message
+MessageBus.publish "/channel", "hello", group_ids: [1, 2, 3]
+
+# example of MessageBus to set user_ids from an initializer in Rails and Devise:
 # config/inializers/message_bus.rb
 MessageBus.user_id_lookup do |env|
   req = Rack::Request.new(env)
+
   if req.session && req.session["warden.user.user.key"] && req.session["warden.user.user.key"][0][0]
     user = User.find(req.session["warden.user.user.key"][0][0])
     user.id
   end
 end
 ```
+
+If both `user_ids` and `group_ids` options are supplied when publishing a message, the message will be targetted at clients with lookup return values that  matches on either the `user_ids` **or** the `group_ids` options.
+
+```ruby
+MessageBus.publish "/channel", "hello", user_ids: [1, 2, 3], group_ids: [1, 2, 3]
+```
+
+If the `client_ids` option is supplied with either the `user_ids` or `group_ids` options when publising a message, the `client_ids` option will be applied unconditionally and messages will be filtered further using `user_id` or `group_id` clauses.
+
+```ruby
+MessageBus.publish "/channel", "hello", client_ids: ["XXX", "YYY"], user_ids: [1, 2, 3], group_ids: [1, 2, 3]
+```
+
+Passing `nil` or `[]` to either `client_ids`, `user_ids` or `group_ids` is equivalent to allowing all values on each option.
+
+### Filtering Client Messages
+
+Custom client message filters can be registered via `MessageBus#register_client_message_filter`. This can be useful for filtering away messages from the client based on the message's payload.
+
+For example, ensuring that only messages seen by the server in the last 20 seconds are published to the client:
+
+```
+MessageBus.register_client_message_filter('/test') do |message|
+  (Time.now.to_i - message.data[:published_at]) <= 20
+end
+
+MessageBus.publish('/test/5', { data: "somedata", published_at: Time.now.to_i })
+```
+
+### Error handling
 
 ```ruby
 MessageBus.configure(on_middleware_error: proc do |env, e|
@@ -278,7 +318,8 @@ backgroundCallbackInterval|60000|Interval to poll when long polling is disabled 
 minPollInterval|100|When polling requests succeed, this is the minimum amount of time to wait before making the next request.
 maxPollInterval|180000|If request to the server start failing, MessageBus will backoff, this is the upper limit of the backoff.
 alwaysLongPoll|false|For debugging you may want to disable the "is browser in background" check and always long-poll
-baseUrl|/|If message bus is mounted at a sub-path or different domain, you may configure it to perform requests there
+shouldLongPollCallback|undefined|A callback returning true or false that determines if we should long-poll or not, if unset ignore and simply depend on window visibility.
+baseUrl|/|If message bus is mounted at a sub-path or different domain, you may configure it to perform requests there.  See `MessageBus.base_route=` on how to configure the MessageBus server to listen on a sub-path.
 ajax|$.ajax falling back to XMLHttpRequest|MessageBus will first attempt to use jQuery and then fallback to a plain XMLHttpRequest version that's contained in the `message-bus-ajax.js` file. `message-bus-ajax.js` must be loaded after `message-bus.js` for it to be used. You may override this option with a function that implements an ajax request by some other means
 headers|{}|Extra headers to be include with requests. Properties and values of object must be valid values for HTTP Headers, i.e. no spaces or control characters.
 minHiddenPollInterval|1500|Time to wait between poll requests performed by background or hidden tabs and windows, shared state via localStorage
@@ -299,8 +340,6 @@ enableChunkedEncoding|true|Allows streaming of message bus data over the HTTP co
 `MessageBus.stop()` : Stops all MessageBus activity
 
 `MessageBus.status()` : Returns status (started, paused, stopped)
-
-`MessageBus.noConflict()` : Removes MessageBus from the global namespace by replacing it with whatever was present before MessageBus was loaded. Returns a reference to the MessageBus object.
 
 `MessageBus.diagnostics()` : Returns a log that may be used for diagnostics on the status of message bus.
 
@@ -559,6 +598,18 @@ MessageBus.configure(on_middleware_error: proc do |env, e|
     raise e
   end
 end)
+```
+
+### Adding extra response headers
+
+In e.g. `config/initializers/message_bus.rb`:
+
+```ruby
+MessageBus.extra_response_headers_lookup do |env|
+  [
+      ["Access-Control-Allow-Origin", "http://example.com:3000"],
+  ]
+end
 ```
 
 ## How it works

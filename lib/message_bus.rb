@@ -149,6 +149,19 @@ module MessageBus::Implementation
     @config[:long_polling_interval] || 25 * 1000
   end
 
+  # @param [String] route Message bus will listen to requests on this route.
+  # @return [void]
+  def base_route=(route)
+    configure(base_route: route.gsub(Regexp.new('\A(?!/)|(?<!/)\Z|//+'), "/"))
+  end
+
+  # @return [String] the route that message bus will respond to. If not
+  #   explicitly set, defaults to "/". Requests to "#{base_route}message-bus/*" will be handled
+  #   by the message bus server.
+  def base_route
+    @config[:base_route] || "/"
+  end
+
   # @return [Boolean] whether the bus is disabled or not
   def off?
     @off
@@ -553,6 +566,26 @@ module MessageBus::Implementation
   #   defaults to `60`.
   def keepalive_interval
     @config[:keepalive_interval] || 60
+  end
+
+  # Registers a client message filter that allows messages to be filtered from the client.
+  #
+  # @param [String,Regexp] channel_prefix channel prefix to match against a message's channel
+  #
+  # @yieldparam [MessageBus::Message] message published to the channel that matched the prefix provided
+  # @yieldreturn [Boolean] whether the message should be published to the client
+  # @return [void]
+  def register_client_message_filter(channel_prefix, &blk)
+    if blk
+      configure(client_message_filters: []) if !@config[:client_message_filters]
+      @config[:client_message_filters] << [channel_prefix, blk]
+    end
+  end
+
+  # @return [Array] returns a hash of message filters that have been registered
+  def client_message_filters
+    configure(client_message_filters: []) if !@config[:client_message_filters]
+    @config[:client_message_filters]
   end
 
   private

@@ -1,1 +1,9 @@
-inherit_from: https://raw.githubusercontent.com/discourse/discourse/master/.rubocop.yml
+inherit_gem:
+  rubocop-discourse: .rubocop.yml
+
+AllCops:
+  Exclude:
+    - 'examples/**/*'
+
+RSpec:
+  Enabled: false

@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 # MessageBus diagnostics are used for troubleshooting the bus and optimising its configuration
 # @see MessageBus::Rack::Diagnostics
 class MessageBus::Diagnostics
@@ -14,7 +15,6 @@ class MessageBus::Diagnostics
       #  process to process comms
       bus.subscribe('/_diagnostics/hup') do |msg|
         if Process.pid == msg.data["pid"] && hostname == msg.data["hostname"]
-          $shutdown = true
           sleep 4
           Process.kill("HUP", $$)
         end

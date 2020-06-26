@@ -1,3 +1,4 @@
+# frozen_string_literal: true
 require 'rubygems'
 require 'rake/testtask'
 require 'bundler'
@@ -91,3 +92,7 @@ end
 
 desc "Run all tests, link checks and confirms documentation compiles without error"
 task default: [:spec, :rubocop, :test_doc]
+
+Rake::Task['release'].enhance do
+  sh "npm publish"
+end
